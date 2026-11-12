@@ -12,6 +12,7 @@ Enforces:
 - Generic secure error handling with zero traceback leakage
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -32,14 +33,16 @@ from starlette.responses import JSONResponse
 
 # --- 1. Configuration & Secrets (Store Hashes Only) ---
 def _load_env():
-    env_file = Path(".env")
+    env_file = Path(__file__).resolve().parent / ".env"
     if env_file.is_file():
         for line in env_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, _, v = line.partition("=")
-                if k.strip() and k.strip() not in os.environ:
-                    os.environ[k.strip()] = v.strip().strip("\"'")
+                k = k.strip()
+                v = v.strip().strip("\"'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
 
 _load_env()
 
@@ -51,7 +54,7 @@ STORED_KEYS: Dict[str, Dict[str, str]] = {
     _hash(os.getenv("ADMIN_API_KEY", "admin-secret-key-456")): {"user": "admin_user", "role": "admin"},
 }
 
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_GUARD_MODEL = "meta/llama-guard-4-12b"
 
 
@@ -117,6 +120,7 @@ def verify_ai_guardrail(prompt: str) -> bool:
     """
     Evaluates prompt safety using Meta Llama-Guard-4-12B on NVIDIA NIM.
     Returns True if verified safe, False if flagged unsafe.
+    Allows Privacy (S7) flags to reach RBAC for employee directory queries.
     """
     if not NVIDIA_API_KEY:
         return True
@@ -135,8 +139,15 @@ def verify_ai_guardrail(prompt: str) -> bool:
         )
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-            verdict = body["choices"][0]["message"]["content"].strip().lower()
-            return not verdict.startswith("unsafe")
+            content = body["choices"][0]["message"]["content"].strip()
+            lines = [line.strip() for line in content.splitlines() if line.strip()]
+            if not lines or not lines[0].lower().startswith("unsafe"):
+                return True
+            # Category S7 is Privacy/PII (e.g. employee inquiries), which is governed by RBAC
+            categories = [cat.upper() for cat in lines[1:]]
+            if categories and all(c == "S7" for c in categories):
+                return True
+            return False
     except Exception:
         # Fallback to local rule if external call fails or times out
         return True
@@ -250,7 +261,8 @@ async def ask_endpoint(payload: AskRequest, request: Request):
     user, role = user_info["user"], user_info["role"]
 
     # 2. Defense-in-Depth Guardrails (Local Regex Filter + Llama-Guard AI Model)
-    if INJECTION_REGEX.search(payload.question) or not verify_ai_guardrail(payload.question):
+    is_safe = await asyncio.to_thread(verify_ai_guardrail, payload.question)
+    if INJECTION_REGEX.search(payload.question) or not is_safe:
         audit_log("injection_blocked", user=user, role=role, ip=ip, fingerprint=fp)
         return JSONResponse(status_code=400, content={"detail": "Invalid request"})
 
