@@ -1,0 +1,12 @@
+{"timestamp": "2026-11-12T09:02:44.743377+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.1.1", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.755107+00:00", "event": "auth_failed", "user": null, "role": null, "action": null, "ip": "10.0.2.1", "fingerprint": "0d29294b"}
+{"timestamp": "2026-11-12T09:02:44.765463+00:00", "event": "injection_blocked", "user": "analyst_user", "role": "analyst", "action": null, "ip": "10.0.2.2", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.775989+00:00", "event": "forbidden", "user": "analyst_user", "role": "analyst", "action": "employee_info", "ip": "10.0.2.3", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.786886+00:00", "event": "malformed_request", "user": null, "role": null, "action": null, "ip": "10.0.2.4"}
+{"timestamp": "2026-11-12T09:02:44.797217+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.99.107", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.807898+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.99.107", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.818259+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.99.107", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.828584+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.99.107", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.839320+00:00", "event": "action_ok", "user": "analyst_user", "role": "analyst", "action": "sales_report", "ip": "10.0.99.107", "fingerprint": "a6f632a6"}
+{"timestamp": "2026-11-12T09:02:44.860682+00:00", "event": "rate_limited", "user": null, "role": null, "action": null, "ip": "10.0.99.107"}
+{"timestamp": "2026-11-12T09:02:44.870265+00:00", "event": "rate_limited", "user": null, "role": null, "action": null, "ip": "10.0.99.107"}
