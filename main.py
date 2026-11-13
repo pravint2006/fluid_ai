@@ -195,44 +195,22 @@ def route_action(question: str) -> str:
     return "fallback"
 
 def generate_ai_insights(action: str, question: str, data: Any) -> str:
-    """
-    Generates dynamic AI response using NVIDIA NIM generative LLM.
-    If the API call is unavailable or fails, returns a clean dynamic response.
-    """
+    """Sends all queries directly and dynamically to NVIDIA Nemotron."""
     if NVIDIA_GEN_MODEL and NVIDIA_API_KEY:
         try:
-            if action == "fallback":
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a helpful enterprise AI assistant for Fluid AI. "
-                            "You provide authorized access to enterprise sales data, IT support ticket creation, "
-                            "and staff directories under multi-layer security guardrails. "
-                            "Answer questions concisely and helpfully."
-                        ),
-                    },
-                    {"role": "user", "content": question},
-                ]
-            else:
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an enterprise AI assistant for Fluid AI. "
-                            "Analyze the business data in context of the user question and provide a concise, "
-                            "professional 1-sentence insight or summary."
-                        ),
-                    },
-                    {"role": "user", "content": f"User Request: '{question}'\nBusiness Data: {json.dumps(data)}"},
-                ]
-
+            user_content = f"Question: {question}" + (f"\nBusiness Data: {json.dumps(data)}" if data else "")
             req = urllib.request.Request(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
                 data=json.dumps({
                     "model": NVIDIA_GEN_MODEL,
-                    "messages": messages,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are an enterprise AI assistant for Fluid AI. Answer questions concisely and professionally using any provided business data."
+                        },
+                        {"role": "user", "content": user_content}
+                    ],
                     "max_tokens": 120,
                     "temperature": 0.2,
                 }).encode("utf-8"),
