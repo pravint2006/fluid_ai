@@ -30,6 +30,10 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import JSONResponse
 
+class PrettyJSONResponse(JSONResponse):
+    def render(self, content: Any) -> bytes:
+        return (json.dumps(content, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
 
 # --- 1. Configuration & Secrets (Store Hashes Only) ---
 def _load_env():
@@ -283,7 +287,7 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=500)
     api_key: str = Field(..., min_length=1, max_length=128)
 
-app = FastAPI(title="Secure Enterprise AI API", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="Secure Enterprise AI API", default_response_class=PrettyJSONResponse, docs_url=None, redoc_url=None, openapi_url=None)
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -291,22 +295,22 @@ async def rate_limit_middleware(request: Request, call_next):
         ip = get_client_ip(request)
         if not rate_limiter.allow(ip):
             audit_log("rate_limited", ip=ip)
-            return JSONResponse(status_code=429, content={"detail": "Too many requests"})
+            return PrettyJSONResponse(status_code=429, content={"detail": "Too many requests"})
     return await call_next(request)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     audit_log("malformed_request", ip=get_client_ip(request))
-    return JSONResponse(status_code=422, content={"detail": "Invalid request"})
+    return PrettyJSONResponse(status_code=422, content={"detail": "Invalid request"})
 
 @app.exception_handler(Exception)
 async def generic_error_handler(request: Request, exc: Exception):
     audit_log("server_error", ip=get_client_ip(request))
-    return JSONResponse(status_code=500, content={"detail": "Internal error"})
+    return PrettyJSONResponse(status_code=500, content={"detail": "Internal error"})
 
 
 # --- 7. Main Endpoint ---
-@app.post("/ask")
+@app.post("/ask", response_class=PrettyJSONResponse)
 async def ask_endpoint(payload: AskRequest, request: Request):
     ip = get_client_ip(request)
     cand_hash = _hash(payload.api_key)
@@ -316,7 +320,7 @@ async def ask_endpoint(payload: AskRequest, request: Request):
     # 1. Authenticate API Key
     if not user_info:
         audit_log("auth_failed", ip=ip, fingerprint=fp)
-        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+        return PrettyJSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     user, role = user_info["user"], user_info["role"]
 
@@ -324,7 +328,7 @@ async def ask_endpoint(payload: AskRequest, request: Request):
     is_safe = await asyncio.to_thread(verify_ai_guardrail, payload.question)
     if INJECTION_REGEX.search(payload.question) or not is_safe:
         audit_log("injection_blocked", user=user, role=role, ip=ip, fingerprint=fp)
-        return JSONResponse(status_code=400, content={"detail": "Invalid request"})
+        return PrettyJSONResponse(status_code=400, content={"detail": "Invalid request"})
 
     # 3. Intent Routing
     action = route_action(payload.question)
@@ -332,12 +336,12 @@ async def ask_endpoint(payload: AskRequest, request: Request):
     # 4. Role-Based Access Control (RBAC)
     if role not in ROLE_PERMISSIONS.get(action, []):
         audit_log("forbidden", user=user, role=role, action=action, ip=ip, fingerprint=fp)
-        return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+        return PrettyJSONResponse(status_code=403, content={"detail": "Forbidden"})
 
     # 5. Execute Action & Audit
     result = execute_action(action, user, payload.question)
     audit_log("action_ok", user=user, role=role, action=action, ip=ip, fingerprint=fp)
-    return JSONResponse(status_code=200, content={
+    return PrettyJSONResponse(status_code=200, content={
         "status": "success",
         "action": action,
         "guardrail": "Meta-Llama-Guard-4-12B verified",
