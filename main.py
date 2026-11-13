@@ -243,28 +243,7 @@ def generate_ai_insights(action: str, question: str, data: Any) -> str:
         except Exception:
             pass
 
-    # Graceful offline fallback if NIM generative API is unreachable
-    q = question.lower()
-    if action == "sales_report":
-        if "europe" in q:
-            return f"Europe generated ${MOCK_SALES['by_region']['Europe']:,.2f} in revenue this period."
-        if "north america" in q:
-            return f"North America leads performance with ${MOCK_SALES['by_region']['North America']:,.2f} in sales."
-        if "asia" in q:
-            return f"Asia Pacific contributed ${MOCK_SALES['by_region']['Asia Pacific']:,.2f} in revenue."
-        return "Weekly sales reached $154,200 across 1,280 orders. North America represents the leading revenue channel ($68,400)."
-
-    if action == "create_ticket":
-        if any(w in q for w in ["outage", "down", "critical", "timeout", "urgent"]):
-            return "Severity evaluated as HIGH: Escalated to on-call infrastructure engineering."
-        return "Ticket registered in queue with Normal triage priority."
-
-    if action == "employee_info":
-        if isinstance(data, dict) and "name" in data:
-            return f"Verified personnel record for {data['name']} ({data['role']})."
-        return "Displaying authorized corporate directory personnel."
-
-    return "I am your Enterprise AI Assistant for Fluid AI, specialized in sales data, support tickets, and staff directory access under enterprise security controls."
+    return "Enterprise AI response unavailable."
 
 def execute_action(action: str, user: str, question: str) -> Dict[str, Any]:
     if action == "sales_report":
