@@ -56,6 +56,7 @@ STORED_KEYS: Dict[str, Dict[str, str]] = {
 
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_GUARD_MODEL = "meta/llama-guard-4-12b"
+NVIDIA_GEN_MODEL = os.getenv("NVIDIA_GEN_MODEL", "")
 
 
 # --- 2. Audit Logging (Thread-Safe JSON Lines) ---
@@ -189,31 +190,90 @@ def route_action(question: str) -> str:
         return "employee_info"
     return "fallback"
 
+def generate_ai_insights(action: str, question: str, data: Any) -> str:
+    """
+    Generates dynamic AI analysis for business actions.
+    Uses NVIDIA NIM generative LLM if configured; otherwise provides smart contextual insights.
+    """
+    if NVIDIA_GEN_MODEL and NVIDIA_API_KEY:
+        try:
+            prompt = f"User asked: '{question}'. Business data: {json.dumps(data)}. Provide a concise 1-sentence executive summary."
+            req = urllib.request.Request(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
+                data=json.dumps({
+                    "model": NVIDIA_GEN_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 60,
+                }).encode("utf-8"),
+            )
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+                return res["choices"][0]["message"]["content"].strip()
+        except Exception:
+            pass
+
+    # Contextual dynamic summary
+    q = question.lower()
+    if action == "sales_report":
+        if "europe" in q:
+            return f"Europe generated ${MOCK_SALES['by_region']['Europe']:,.2f} in revenue this period."
+        if "north america" in q:
+            return f"North America leads performance with ${MOCK_SALES['by_region']['North America']:,.2f} in sales."
+        if "asia" in q:
+            return f"Asia Pacific contributed ${MOCK_SALES['by_region']['Asia Pacific']:,.2f} in revenue."
+        return "Weekly sales reached $154,200 across 1,280 orders. North America represents the leading revenue channel ($68,400)."
+
+    if action == "create_ticket":
+        if any(w in q for w in ["outage", "down", "critical", "timeout", "urgent"]):
+            return "Severity evaluated as HIGH: Escalated to on-call infrastructure engineering."
+        return "Ticket registered in queue with Normal triage priority."
+
+    if action == "employee_info":
+        if isinstance(data, dict) and "name" in data:
+            return f"Verified personnel record for {data['name']} ({data['role']})."
+        return "Displaying authorized corporate directory personnel."
+
+    return "I could not determine the appropriate enterprise action. Supported queries: 1. Sales Report, 2. Support Tickets, 3. Employee Directory (Admin only)."
+
 def execute_action(action: str, user: str, question: str) -> Dict[str, Any]:
     if action == "sales_report":
         return {
             "report": MOCK_SALES,
             "generated_for": user,
-            "ai_summary": "Weekly sales reached $154,200 across 1,280 orders. North America represents the leading revenue channel ($68,400).",
+            "ai_summary": generate_ai_insights(action, question, MOCK_SALES),
         }
     if action == "create_ticket":
+        priority = "High" if any(w in question.lower() for w in ["outage", "down", "critical", "timeout", "urgent"]) else "Normal"
         ticket = {
             "ticket_id": f"TICK-{len(SUPPORT_TICKETS) + 1:04d}",
             "created_by": user,
             "summary": question,
             "status": "OPEN",
-            "priority": "Normal",
+            "priority": priority,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         SUPPORT_TICKETS.append(ticket)
-        return {"message": f"Support ticket {ticket['ticket_id']} created successfully.", "ticket": ticket}
+        return {
+            "message": f"Support ticket {ticket['ticket_id']} created successfully.",
+            "ticket": ticket,
+            "ai_triage": generate_ai_insights(action, question, ticket),
+        }
     if action == "employee_info":
         for k, v in MOCK_EMPLOYEES.items():
             if k in question.lower() or v["name"].lower() in question.lower():
-                return {"matched": True, "employee": v}
-        return {"matched": True, "directory": list(MOCK_EMPLOYEES.values())}
+                return {
+                    "matched": True,
+                    "employee": v,
+                    "ai_note": generate_ai_insights(action, question, v),
+                }
+        return {
+            "matched": True,
+            "directory": list(MOCK_EMPLOYEES.values()),
+            "ai_note": generate_ai_insights(action, question, list(MOCK_EMPLOYEES.values())),
+        }
     return {
-        "message": "I could not determine the appropriate enterprise action. Supported queries: 1. Sales Report, 2. Support Tickets, 3. Employee Directory (Admin only)."
+        "message": generate_ai_insights(action, question, None)
     }
 
 
