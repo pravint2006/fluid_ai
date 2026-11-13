@@ -60,7 +60,7 @@ STORED_KEYS: Dict[str, Dict[str, str]] = {
 
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_GUARD_MODEL = "meta/llama-guard-4-12b"
-NVIDIA_GEN_MODEL = os.getenv("NVIDIA_GEN_MODEL", "")
+NVIDIA_GEN_MODEL = os.getenv("NVIDIA_GEN_MODEL", "nvidia/nemotron-3.5-bolt-e4b")
 
 
 # --- 2. Audit Logging (Thread-Safe JSON Lines) ---
@@ -196,28 +196,54 @@ def route_action(question: str) -> str:
 
 def generate_ai_insights(action: str, question: str, data: Any) -> str:
     """
-    Generates dynamic AI analysis for business actions.
-    Uses NVIDIA NIM generative LLM if configured; otherwise provides smart contextual insights.
+    Generates dynamic AI response using NVIDIA NIM generative LLM.
+    If the API call is unavailable or fails, returns a clean dynamic response.
     """
     if NVIDIA_GEN_MODEL and NVIDIA_API_KEY:
         try:
-            prompt = f"User asked: '{question}'. Business data: {json.dumps(data)}. Provide a concise 1-sentence executive summary."
+            if action == "fallback":
+                messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful enterprise AI assistant for Fluid AI. "
+                            "You provide authorized access to enterprise sales data, IT support ticket creation, "
+                            "and staff directories under multi-layer security guardrails. "
+                            "Answer questions concisely and helpfully."
+                        ),
+                    },
+                    {"role": "user", "content": question},
+                ]
+            else:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an enterprise AI assistant for Fluid AI. "
+                            "Analyze the business data in context of the user question and provide a concise, "
+                            "professional 1-sentence insight or summary."
+                        ),
+                    },
+                    {"role": "user", "content": f"User Request: '{question}'\nBusiness Data: {json.dumps(data)}"},
+                ]
+
             req = urllib.request.Request(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
                 data=json.dumps({
                     "model": NVIDIA_GEN_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 60,
+                    "messages": messages,
+                    "max_tokens": 120,
+                    "temperature": 0.2,
                 }).encode("utf-8"),
             )
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
                 res = json.loads(resp.read().decode("utf-8"))
                 return res["choices"][0]["message"]["content"].strip()
         except Exception:
             pass
 
-    # Contextual dynamic summary
+    # Graceful offline fallback if NIM generative API is unreachable
     q = question.lower()
     if action == "sales_report":
         if "europe" in q:
@@ -238,16 +264,7 @@ def generate_ai_insights(action: str, question: str, data: Any) -> str:
             return f"Verified personnel record for {data['name']} ({data['role']})."
         return "Displaying authorized corporate directory personnel."
 
-    if any(p in q for p in ["what are you", "who are you", "what is this", "tell me about yourself"]):
-        return "I am the Secure Enterprise AI Gateway assistant. I provide authorized access to enterprise sales data, IT support ticket creation, and staff directories under multi-layer security guardrails."
-    if any(p in q for p in ["what can you do", "help", "how does this work", "options", "capabilities"]):
-        return "I can help you with: 1. Generating weekly sales and revenue reports. 2. Submitting IT support tickets. 3. Looking up corporate staff in the employee directory (Admin only)."
-    if re.search(r"\b(hello|hi|hey|greetings)\b", q):
-        return "Hello! I am your Enterprise AI Assistant. How can I help you today? You can ask for sales reports, create support tickets, or query staff records."
-    if re.search(r"\b(thanks|thank you)\b", q):
-        return "You are very welcome! Let me know if you need assistance with sales, tickets, or directory services."
-
-    return f"I understand you are asking: \"{question}\". As an enterprise gateway, I specialize in Sales Reports, Support Tickets, and Employee Directory access. How can I help you with those?"
+    return "I am your Enterprise AI Assistant for Fluid AI, specialized in sales data, support tickets, and staff directory access under enterprise security controls."
 
 def execute_action(action: str, user: str, question: str) -> Dict[str, Any]:
     if action == "sales_report":
@@ -348,7 +365,7 @@ async def ask_endpoint(payload: AskRequest, request: Request):
         return PrettyJSONResponse(status_code=403, content={"detail": "Forbidden"})
 
     # 5. Execute Action & Audit
-    result = execute_action(action, user, payload.question)
+    result = await asyncio.to_thread(execute_action, action, user, payload.question)
     audit_log("action_ok", user=user, role=role, action=action, ip=ip, fingerprint=fp)
     return PrettyJSONResponse(status_code=200, content={
         "status": "success",
