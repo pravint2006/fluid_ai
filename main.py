@@ -238,7 +238,16 @@ def generate_ai_insights(action: str, question: str, data: Any) -> str:
             return f"Verified personnel record for {data['name']} ({data['role']})."
         return "Displaying authorized corporate directory personnel."
 
-    return "I could not determine the appropriate enterprise action. Supported queries: 1. Sales Report, 2. Support Tickets, 3. Employee Directory (Admin only)."
+    if any(p in q for p in ["what are you", "who are you", "what is this", "tell me about yourself"]):
+        return "I am the Secure Enterprise AI Gateway assistant. I provide authorized access to enterprise sales data, IT support ticket creation, and staff directories under multi-layer security guardrails."
+    if any(p in q for p in ["what can you do", "help", "how does this work", "options", "capabilities"]):
+        return "I can help you with: 1. Generating weekly sales and revenue reports. 2. Submitting IT support tickets. 3. Looking up corporate staff in the employee directory (Admin only)."
+    if re.search(r"\b(hello|hi|hey|greetings)\b", q):
+        return "Hello! I am your Enterprise AI Assistant. How can I help you today? You can ask for sales reports, create support tickets, or query staff records."
+    if re.search(r"\b(thanks|thank you)\b", q):
+        return "You are very welcome! Let me know if you need assistance with sales, tickets, or directory services."
+
+    return f"I understand you are asking: \"{question}\". As an enterprise gateway, I specialize in Sales Reports, Support Tickets, and Employee Directory access. How can I help you with those?"
 
 def execute_action(action: str, user: str, question: str) -> Dict[str, Any]:
     if action == "sales_report":
